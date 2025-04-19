@@ -195,22 +195,29 @@ def get_ecc(dividend, codewords: int):
                       247, 243, 251, 235, 203, 139, 11, 22, 44, 88, 176, 125, 250, 233, 207, 131, 27, 54, 108, 216, 173, 71, 142, 1]
     
     def galois_multiplication(x, y):
-        if x == 0 or y == 0:
+        if x == 0:
             return 0
         return GALOIS_ANTILOG[(GALOIS_LOG[x] + GALOIS_LOG[y]) % 255]
 
-    def polynomial_multiplication(p, q):
-        result = [0] * (len(p) + len(q) - 1)
-        for i in range(len(p)):
-            for j in range(len(q)):
-                result[i + j] ^= galois_multiplication(p[i], q[j])
-        return result
-
     dividend.extend([0] * codewords)
-
-    divisor = [1]
-    for i in range(codewords):
-        divisor = polynomial_multiplication(divisor, [1, GALOIS_ANTILOG[i]])
+    
+    generator_polynomials = {
+        7: [1, 127, 122, 154, 164, 11, 68, 117],
+        10: [1, 216, 194, 159, 111, 199, 94, 95, 113, 157, 193],
+        13: [1, 137, 73, 227, 17, 177, 17, 52, 13, 46, 43, 83, 132, 120],
+        15: [1, 29, 196, 111, 163, 112, 74, 10, 105, 105, 139, 132, 151, 32, 134, 26],
+        16: [1, 59, 13, 104, 189, 68, 209, 30, 8, 163, 65, 41, 229, 98, 50, 36, 59],
+        17: [1, 119, 66, 83, 120, 119, 22, 197, 83, 249, 41, 143, 134, 85, 53, 125, 99, 79],
+        18: [1, 239, 251, 183, 113, 149, 175, 199, 215, 240, 220, 73, 82, 173, 75, 32, 67, 217, 146],
+        20: [1, 152, 185, 240, 5, 111, 99, 6, 220, 112, 150, 69, 36, 187, 22, 228, 198, 121, 121, 165, 174],
+        22: [1, 89, 179, 131, 176, 182, 244, 19, 189, 69, 40, 28, 137, 29, 123, 67, 253, 86, 218, 230, 26, 145, 245],
+        24: [1, 122, 118, 169, 70, 178, 237, 216, 102, 115, 150, 229, 73, 130, 72, 61, 43, 206, 1, 237, 247, 127, 217, 144, 117],
+        26: [1, 246, 51, 183, 4, 136, 98, 199, 152, 77, 56, 206, 24, 145, 40, 209, 117, 233, 42, 135, 68, 70, 144, 146, 77, 43, 94],
+        28: [1, 252, 9, 28, 13, 18, 251, 208, 150, 103, 174, 100, 41, 167, 12, 247, 56, 117, 119, 233, 127, 181, 100, 121, 147, 176, 74, 58, 197],
+        30: [1, 212, 246, 77, 73, 195, 192, 75, 98, 5, 70, 103, 177, 22, 217, 138, 51, 181, 246, 72, 25, 18, 46, 228, 74, 216, 195, 11, 106, 130, 150]
+    }
+    
+    divisor = generator_polynomials[codewords]
 
     msg_out = list(dividend)
     for i in range(len(dividend) - len(divisor) + 1):
@@ -221,14 +228,45 @@ def get_ecc(dividend, codewords: int):
 
     return msg_out[-(len(divisor) - 1):]
 
-def error_correction(encoded_data: str, version: int):
-
-    codewords = [encoded_data[i:i+8] for i in range(0, len(encoded_data), 8)]
-    message_polynomial = [int(encoded_data[i:i+8], 2) for i in range(0, len(encoded_data), 8)]
+def structure_final_message(encoded_data: str, version: int):
+    codewords = [int(encoded_data[i:i+8], 2) for i in range(0, len(encoded_data), 8)]
 
     groups = split_data(codewords, version)
     
     error_correction_codewords = [10, 16, 26, 18, 24, 16, 18, 22, 22, 26, 30, 22, 22, 24, 24, 28, 28, 26, 26, 26,
                                   26, 28, 28, 28, 28, 28, 28, 28, 28, 28, 28, 28, 28, 28, 28, 28, 28, 28, 28, 28]
     
-    return get_ecc(message_polynomial, error_correction_codewords[version - 1])
+    ecc_count = error_correction_codewords[version - 1]
+
+    ecc_blocks = []
+    for group in groups:
+        for block in group:
+            ecc = get_ecc(list(block), ecc_count)
+            ecc_blocks.append(ecc)
+
+    final_message = []
+    max_len = max(len(block) for group in groups for block in group)
+    
+    for i in range(max_len):
+        for group in groups:
+            for block in group:
+                if i < len(block):
+                    final_message.append(format(block[i], '08b'))
+                    
+    for i in range(ecc_count):
+        for ecc in ecc_blocks:
+            final_message.append(format(ecc[i], '08b'))
+            
+    remainder_bits = [0, 7, 7, 7, 7, 7, 0, 0, 0, 0, 0, 0, 0, 3, 3, 3, 3, 3, 3, 3,
+                      4, 4, 4, 4, 4, 4, 4, 3, 3, 3, 3, 3, 3, 3, 0, 0, 0, 0, 0, 0]
+                      
+    final_message.extend(['0'] * remainder_bits[version - 1])
+
+    return final_message
+    
+data = 'HELLO WORLD'
+encode_type = data_type(data)
+version = get_version(data, encode_type)
+encoded_data = encode_data(data, version, encode_type)
+message = structure_final_message(encoded_data, version)
+print(message)
