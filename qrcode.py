@@ -3,7 +3,7 @@ ALPHANUMERIC = 1
 BYTE = 2
 KANJI = 3
 
-def data_type(data: str) -> int:
+def get_data_type(data: str) -> int:
     if data.isdecimal():
         return NUMERIC
         
@@ -11,6 +11,30 @@ def data_type(data: str) -> int:
         return ALPHANUMERIC
         
     return BYTE
+    
+def get_version(data: str, encode_type: int) -> int:
+    character_capacity_table = [
+        [34, 20, 14], [63, 38, 26], [101, 61, 42], [149, 90, 62], [202, 122, 84],
+        [255, 154, 106], [293, 178, 122], [365, 221, 152], [432, 262, 180], [513, 311, 213],
+        [604, 366, 251], [691, 419, 287], [796, 483, 331], [871, 528, 362], [991, 600, 412],
+        [1082, 656, 450], [1212, 734, 504], [1346, 816, 560], [1500, 909, 624], [1600, 970, 666],
+        [1708, 1035, 711], [1872, 1134, 779], [2059, 1248, 857], [2188, 1326, 911], [2395, 1451, 997],
+        [2544, 1542, 1059], [2701, 1637, 1125], [2857, 1732, 1190], [3035, 1839, 1264], [3289, 1994, 1370],
+        [3486, 2113, 1452], [3693, 2238, 1538], [3909, 2369, 1628], [4134, 2506, 1722], [4343, 2632, 1809],
+        [4588, 2780, 1911], [4775, 2894, 1989], [5039, 3054, 2099], [5313, 3220, 2213], [5596, 3391, 2331]
+    ]
+    
+    version = 0
+
+    for i in range(len(character_capacity_table)):
+        if character_capacity_table[i][encode_type] >= len(data):
+            version = i + 1
+            break
+
+    if version == 0:
+        raise ValueError("Cannot fit this much data in the QR Code")
+        
+    return version
     
 def encode_numeric(data: str) -> str:
     number_groups = []
@@ -61,31 +85,6 @@ def encode_alphanumeric(data: str) -> str:
     
 def encode_byte(data: str) -> str:
     return ''.join(format(byte, '08b') for byte in data.encode('utf-8'))
-
-def get_version(data: str, encode_type: int) -> int:
-    character_capacity_table = [
-        [34, 20, 14], [63, 38, 26], [101, 61, 42], [149, 90, 62], [202, 122, 84],
-        [255, 154, 106], [293, 178, 122], [365, 221, 152], [432, 262, 180], [513, 311, 213],
-        [604, 366, 251], [691, 419, 287], [796, 483, 331], [871, 528, 362], [991, 600, 412],
-        [1082, 656, 450], [1212, 734, 504], [1346, 816, 560], [1500, 909, 624], [1600, 970, 666],
-        [1708, 1035, 711], [1872, 1134, 779], [2059, 1248, 857], [2188, 1326, 911], [2395, 1451, 997],
-        [2544, 1542, 1059], [2701, 1637, 1125], [2857, 1732, 1190], [3035, 1839, 1264], [3289, 1994, 1370],
-        [3486, 2113, 1452], [3693, 2238, 1538], [3909, 2369, 1628], [4134, 2506, 1722], [4343, 2632, 1809],
-        [4588, 2780, 1911], [4775, 2894, 1989], [5039, 3054, 2099], [5313, 3220, 2213], [5596, 3391, 2331]
-    ]
-    
-    # size = version * 4 + 17
-    version = 0
-
-    for i in range(len(character_capacity_table)):
-        if character_capacity_table[i][encode_type] >= len(data):
-            version = i + 1
-            break
-
-    if version == 0:
-        raise ValueError("Cannot fit this much data in the QR Code")
-        
-    return version
     
 def encode_data(data: str, version: int, encode_type: int) -> str:
     mode_indicator = format(2 ** encode_type, '04b')
@@ -261,12 +260,176 @@ def structure_final_message(encoded_data: str, version: int):
                       4, 4, 4, 4, 4, 4, 4, 3, 3, 3, 3, 3, 3, 3, 0, 0, 0, 0, 0, 0]
                       
     final_message.extend(['0'] * remainder_bits[version - 1])
-
-    return final_message
     
-data = 'HELLO WORLD'
-encode_type = data_type(data)
-version = get_version(data, encode_type)
-encoded_data = encode_data(data, version, encode_type)
-message = structure_final_message(encoded_data, version)
-print(message)
+    return ''.join(final_message)
+    
+def place_finder_patterns(matrix, size: int):
+    # Top-left finder pattern
+    for i in range(7):
+        for j in range(7):
+            # Outer border
+            if i == 0 or i == 6 or j == 0 or j == 6:
+                matrix[i][j] = 1
+            # 3x3 inner area
+            elif 2 <= i <= 4 and 2 <= j <= 4:
+                matrix[i][j] = 1
+            # Fill the remaining area
+            else:
+                matrix[i][j] = 0
+    
+    # Top-right and bottom-left finder patterns
+    start_limit = size - 7
+    for i in range(start_limit, size):
+        for j in range(7):
+            # Outer border
+            if i == start_limit or i == size - 1 or j == 0 or j == 6:
+                matrix[i][j] = 1
+                matrix[j][i] = 1
+            # 3x3 inner area
+            elif start_limit + 2 <= i <= start_limit + 4 and 2 <= j <= 4:
+                matrix[i][j] = 1
+                matrix[j][i] = 1
+            # Fill the remaining area
+            else:
+                matrix[i][j] = 0
+                matrix[j][i] = 0
+                
+def place_separators(matrix, size: int):
+    # Add separators for top-left finder pattern
+    for i in range(8):
+        matrix[7][i] = 0
+        matrix[i][7] = 0
+    
+    # Add separators for one side of bottom-left and top-right finder patterns
+    for i in range(size - 8, size):
+        matrix[7][i] = 0
+        matrix[i][7] = 0
+    
+    # Add separators for remaining side of bottom-left and top-right finder patterns
+    i = size - 8
+    for j in range(7):
+        matrix[i][j] = 0
+        matrix[j][i] = 0
+                
+def place_alignment_patterns(matrix, version: int):
+    alignment_pattern_locations = {
+        2: [6, 18], 3: [6, 22], 4: [6, 26], 5: [6, 30], 6: [6, 34], 7: [6, 22, 38], 8: [6, 24, 42], 9: [6, 26, 46],
+        10: [6, 28, 50], 11: [6, 30, 54], 12: [6, 32, 58], 13: [6, 34, 62], 14: [6, 26, 46, 66], 15: [6, 26, 48, 70],
+        16: [6, 26, 50, 74], 17: [6, 30, 54, 78], 18: [6, 30, 56, 82], 19: [6, 30, 58, 86], 20: [6, 34, 62, 90],
+        21: [6, 28, 50, 72, 94], 22: [6, 26, 50, 74, 98], 23: [6, 30, 54, 78, 102], 24: [6, 28, 54, 80, 106],
+        25: [6, 32, 58, 84, 110], 26: [6, 30, 58, 86, 114], 27: [6, 34, 62, 90, 118], 28: [6, 26, 50, 74, 98, 122],
+        29: [6, 30, 54, 78, 102, 126], 30: [6, 26, 52, 78, 104, 130], 31: [6, 30, 56, 82, 108, 134], 32: [6, 34, 60, 86, 112, 138],
+        33: [6, 30, 58, 86, 114, 142], 34: [6, 34, 62, 90, 118, 146], 35: [6, 30, 54, 78, 102, 126, 150], 36: [6, 24, 50, 76, 102, 128, 154],
+        37: [6, 28, 54, 80, 106, 132, 158], 38: [6, 32, 58, 84, 110, 136, 162], 39: [6, 26, 54, 82, 110, 138, 166], 40: [6, 30, 58, 86, 114, 142, 170]
+    }
+    
+    # Returns early since version 1 doesn't have alignment patterns
+    if version == 1:
+        return
+    
+    locations = alignment_pattern_locations[version]
+    
+    for row in locations:
+        for column in locations:
+            if (matrix[row - 2][column - 2] != -1 or matrix[row - 2][column + 2] != -1 or
+                matrix[row + 2][column - 2] != -1 or matrix[row + 2][column + 2] != -1):
+                continue
+                
+            for i in range(row - 2, row + 3):
+                for j in range(column - 2, column + 3):
+                    if i == row - 2 or i == row + 2 or j == column - 2 or j == column + 2:
+                        matrix[i][j] = 1
+                    else:
+                        matrix[i][j] = 0
+            matrix[row][column] = 1
+            
+def place_timing_patterns(matrix, size: int):
+    for i in range(8, size - 8):
+        matrix[6][i] = 1 - i % 2
+        matrix[i][6] = 1 - i % 2
+        
+def define_reserverd_areas(matrix, size: int):
+    i = size - 8
+    
+    # Add dark module
+    matrix[i][8] = 1
+    
+    # Add bottom-left reserved area
+    while i < size - 1:
+        i += 1
+        matrix[i][8] = 3
+    
+    # Add top-left reserved area
+    for j in range(9):
+        matrix[8][j] = 3
+        matrix[j][8] = 3
+    
+    # Place back the black modules that got overwritten by the top-left reserved area
+    matrix[8][6] = 1
+    matrix[6][8] = 1
+    
+    # Add top-right reserved area
+    for j in range(size - 8, size):
+        matrix[8][j] = 3
+    
+    # Add reserved version information area (for version 7 and above)
+    if size >= 45:
+        for i in range(size - 11, size - 8):
+            for j in range(6):
+                matrix[i][j] = 3
+                matrix[j][i] = 3
+
+def place_matrix_modules(data: str, version: int):
+    size = version * 4 + 17
+
+    matrix = [[-1 for _ in range(size)] for _ in range(size)]
+    
+    place_finder_patterns(matrix, size)
+    place_separators(matrix, size)
+    place_alignment_patterns(matrix, version)
+    place_timing_patterns(matrix, size)
+    define_reserverd_areas(matrix, size)
+    
+    tracker = 0
+    row = size - 1
+    column = size - 1
+    
+    direction = -1
+    
+    # Populate the matrix with the data and error correction bits in the specified pattern
+    while tracker < len(data):
+        if matrix[row][column] == -1:
+            matrix[row][column] = data[tracker]
+            tracker += 1
+        column -= 1
+        
+        if matrix[row][column] == -1:
+            matrix[row][column] = data[tracker]
+            tracker += 1
+        row += direction
+        column += 1
+            
+        # Handle direction change
+        if row == -1 or row == size:
+            direction *= -1
+            column -= 2
+            row += direction
+            
+        # Ignore column with the vertical timing pattern
+        if column == 6:
+            column -= 1
+            
+    return matrix
+    
+if __name__ == "__main__":
+        
+    data = 'HELLO WORLD'
+    encode_type = get_data_type(data)
+    version = get_version(data, encode_type)
+    encoded_data = encode_data(data, version, encode_type)
+    message = structure_final_message(encoded_data, version)
+    matrix = place_matrix_modules(message, version)
+    for a in matrix:
+        for b in a:
+            print(f" {b} ", end="")
+        print("")
