@@ -1,3 +1,5 @@
+from PIL import Image
+
 NUMERIC = 0
 ALPHANUMERIC = 1
 BYTE = 2
@@ -349,28 +351,22 @@ def place_timing_patterns(matrix, size: int):
         matrix[i][6] = 1 - i % 2
         
 def define_reserverd_areas(matrix, size: int):
-    i = size - 8
-    
-    # Add dark module
-    matrix[i][8] = 1
-    
-    # Add bottom-left reserved area
-    while i < size - 1:
-        i += 1
-        matrix[i][8] = 0
-    
     # Add top-left reserved area
     for j in range(9):
         matrix[8][j] = 0
         matrix[j][8] = 0
-    
+        
     # Place back the black modules that got overwritten by the top-left reserved area
     matrix[8][6] = 1
     matrix[6][8] = 1
-    
-    # Add top-right reserved area
-    for j in range(size - 8, size):
-        matrix[8][j] = 0
+        
+    # Add bottom-left and top-right reserved areas
+    for i in range(size - 8, size):
+        matrix[i][8] = 0
+        matrix[8][i] = 0
+
+    # Add dark module
+    matrix[size - 8][8] = 1
     
     # Add reserved version information area (for version 7 and above)
     if size >= 45:
@@ -557,25 +553,139 @@ def determine_best_mask(masked_matrices, size: int):
     # Chooses the one with the lowest penalty score
     return lowest_penalty_index
 
-def mask_data(matrix, version: int):
-    size = version * 4 + 17
+def mask_data(matrix):
+    size = len(matrix)
     
     masked_matrices = apply_masks(matrix, size)
     lowest_penalty_index = determine_best_mask(masked_matrices, size)
     best_matrix = masked_matrices[lowest_penalty_index]
     
-    return best_matrix
+    return best_matrix, lowest_penalty_index
+    
+def get_format_string(error_correction_level: str, mask: int):
+    format_information_strings = {
+        'L': [
+            '111011111000100', '111001011110011', '111110110101010', '111100010011101',
+            '110011000101111', '110001100011000', '110110001000001', '110100101110110'
+        ],
+        'M': [
+            '101010000010010', '101000100100101', '101111001111100', '101101101001011',
+            '100010111111001', '100000011001110', '100111110010111', '100101010100000'
+        ],
+        'Q': [
+            '011010101011111', '011000001101000', '011111100110001', '011101000000110',
+            '010010010110100', '010000110000011', '010111011011010', '010101111101101'
+        ],
+        'H': [
+            '001011010001001', '001001110111110', '001110011100111', '001100111010000',
+            '000011101100010', '000001001010101', '000110100001100', '000100000111011'
+        ]
+    }
+    
+    return format_information_strings[error_correction_level][mask]
+    
+def get_version_string(version: int):
+    version_information_strings = [
+        '000111110010010100', '001000010110111100', '001001101010011001', '001010010011010011',
+        '001011101111110110', '001100011101100010', '001101100001000111', '001110011000001101',
+        '001111100100101000', '010000101101111000', '010001010001011101', '010010101000010111',
+        '010011010100110010', '010100100110100110', '010101011010000011', '010110100011001001',
+        '010111011111101100', '011000111011000100', '011001000111100001', '011010111110101011',
+        '011011000010001110', '011100110000011010', '011101001100111111', '011110110101110101',
+        '011111001001010000', '100000100111010101', '100001011011110000', '100010100010111010',
+        '100011011110011111', '100100101100001011', '100101010000101110', '100110101001100100',
+        '100111010101000001','101000110001101001'
+    ]
+    
+    return version_information_strings[version - 7]
+    
+def place_format_string(matrix, format_string: str, size: int):
+    tracker = 0
+    
+    # Fill top-left reserved area
+    for i in range(9):
+        if i == 6:
+            continue
         
+        matrix[8][i] = int(format_string[tracker])
+        matrix[i][8] = int(format_string[14 - tracker])
+        tracker += 1
+    
+    tracker -= 1
+    
+    # Fill bottom-left and top-right reserved areas
+    for i in range(size - 8, size):
+        matrix[i][8] = int(format_string[14 - tracker])
+        matrix[8][i] = int(format_string[tracker])
+        tracker += 1
+
+    # Place back dark module
+    matrix[size - 8][8] = 1
+
+def place_version_string(matrix, version_string: str, size: int):
+    tracker = 17
+    
+    # Fill reserved version information areas
+    for i in range(6):
+        for j in range(size - 11, size - 8):
+            matrix[i][j] = int(version_string[tracker])
+            matrix[j][i] = int(version_string[tracker])
+            tracker -= 1
+                
+def fill_reserved_areas(matrix, format_string: str, version_string: str):
+    size = len(matrix)
+    
+    place_format_string(matrix, format_string, size)
+    
+    if version > 6:
+        place_version_string(matrix, version_string, size)
+    
+def add_quiet_zone(matrix):
+    size = len(matrix)
+    
+    final_matrix = [[0] * (size + 8) for _ in range(size + 8)]
+    
+    for i in range(size):
+        for j in range(size):
+            final_matrix[i + 4][j + 4] = matrix[i][j]
+    
+    return final_matrix
+
+def draw_qr_code(matrix, module_size=10):
+    size = len(matrix)
+    
+    img_size = size * module_size
+    img = Image.new('L', (img_size, img_size), color=255)
+
+    for i in range(size):
+        for j in range(size):
+            color = 0 if matrix[i][j] == 1 else 255
+            for x in range(module_size):
+                for y in range(module_size):
+                    img.putpixel((j * module_size + x, i * module_size + y), color)
+
+    return img
+
 if __name__ == "__main__":
         
     data = 'HELLO WORLD'
+    
     encode_type = get_data_type(data)
     version, error_correction_level = get_version_and_error_correction_level(data, encode_type)
+    
     encoded_data = encode_data(data, version, encode_type)
+    
     message = structure_final_message(encoded_data, version)
+    
     matrix = place_matrix_modules(message, version)
-    masked_matrix = mask_data(matrix, version)
-    for a in masked_matrix:
-        for b in a:
-            print(f" {b} ", end="")
-        print("")
+    masked_matrix, mask = mask_data(matrix)
+    
+    format_string = get_format_string(error_correction_level, mask)
+    version_string = get_version_string(version)
+
+    fill_reserved_areas(masked_matrix, format_string, version_string)
+    
+    final_matrix = add_quiet_zone(masked_matrix)
+
+    qr_code = draw_qr_code(final_matrix)
+    qr_code.save('qr_code.png')
