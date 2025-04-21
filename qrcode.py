@@ -12,7 +12,7 @@ def get_data_type(data: str) -> int:
         
     return BYTE
     
-def get_version(data: str, encode_type: int) -> int:
+def get_version_and_error_correction_level(data: str, encode_type: int) -> int:
     character_capacity_table = [
         [34, 20, 14], [63, 38, 26], [101, 61, 42], [149, 90, 62], [202, 122, 84],
         [255, 154, 106], [293, 178, 122], [365, 221, 152], [432, 262, 180], [513, 311, 213],
@@ -34,7 +34,7 @@ def get_version(data: str, encode_type: int) -> int:
     if version == 0:
         raise ValueError("Cannot fit this much data in the QR Code")
         
-    return version
+    return version, 'M'
     
 def encode_numeric(data: str) -> str:
     number_groups = []
@@ -357,12 +357,12 @@ def define_reserverd_areas(matrix, size: int):
     # Add bottom-left reserved area
     while i < size - 1:
         i += 1
-        matrix[i][8] = 3
+        matrix[i][8] = 0
     
     # Add top-left reserved area
     for j in range(9):
-        matrix[8][j] = 3
-        matrix[j][8] = 3
+        matrix[8][j] = 0
+        matrix[j][8] = 0
     
     # Place back the black modules that got overwritten by the top-left reserved area
     matrix[8][6] = 1
@@ -370,14 +370,14 @@ def define_reserverd_areas(matrix, size: int):
     
     # Add top-right reserved area
     for j in range(size - 8, size):
-        matrix[8][j] = 3
+        matrix[8][j] = 0
     
     # Add reserved version information area (for version 7 and above)
     if size >= 45:
         for i in range(size - 11, size - 8):
             for j in range(6):
-                matrix[i][j] = 3
-                matrix[j][i] = 3
+                matrix[i][j] = 0
+                matrix[j][i] = 0
 
 def place_matrix_modules(data: str, version: int):
     size = version * 4 + 17
@@ -421,15 +421,161 @@ def place_matrix_modules(data: str, version: int):
             
     return matrix
     
+def apply_masks(matrix, size: int):
+    masked_matrices = [[row[:] for row in matrix] for _ in range(8)]
+        
+    # Apply mask patterns (Toggle modules)
+    # 0 - (row + column) mod 2 == 0
+    # 1 - row mod 2 == 0
+    # 2 - column mod 3 == 0
+    # 3 - (row + column) mod 3 == 0
+    # 4 - (floor(row / 2) + floor(column / 3)) mod 2 == 0
+    # 5 - ((row * column) mod 2) + ((row * column) mod 3) == 0
+    # 6 - (((row * column) mod 2) + ((row * column) mod 3)) mod 2 == 0
+    # 7 - (((row + column) mod 2) + ((row * column) mod 3) ) mod 2 == 0
+    
+    for row in range(size):
+        for column in range(size):
+            if matrix[row][column] == '0':
+                masked_matrices[0][row][column] = 1 - (row + column) % 2
+                masked_matrices[1][row][column] = 1 - row % 2
+                masked_matrices[2][row][column] = 1 if column % 3 == 0 else 0
+                masked_matrices[3][row][column] = 1 if (row + column) % 3 == 0 else 0
+                masked_matrices[4][row][column] = 1 - (row // 2 + column // 3) % 2
+                masked_matrices[5][row][column] = 1 if row * column % 2 + row * column % 3 == 0 else 0
+                masked_matrices[6][row][column] = 1 - (row * column % 2 + row * column % 3) % 2
+                masked_matrices[7][row][column] = 1 - ((row + column) % 2 + row * column % 3) % 2
+            elif matrix[row][column] == '1':
+                masked_matrices[0][row][column] = (row + column) % 2
+                masked_matrices[1][row][column] = row % 2
+                masked_matrices[2][row][column] = 0 if column % 3 == 0 else 1
+                masked_matrices[3][row][column] = 0 if (row + column) % 3 == 0 else 1
+                masked_matrices[4][row][column] = (row // 2 + column // 3) % 2
+                masked_matrices[5][row][column] = 0 if row * column % 2 + row * column % 3 == 0 else 1
+                masked_matrices[6][row][column] = (row * column % 2 + row * column % 3) % 2
+                masked_matrices[7][row][column] = ((row + column) % 2 + row * column % 3) % 2
+                
+    return masked_matrices
+    
+def evaluate_first_penalty(matrix, size: int):
+    penalty = 0
+    
+    for i in range(size):
+        currentRow = -1
+        currentColumn = -1
+        sequenceRow = 0
+        sequenceColumn = 0
+        
+        for j in range(size):
+            if matrix[i][j] == currentRow:
+                sequenceRow += 1
+            else:
+                if sequenceRow > 4:
+                    penalty += sequenceRow - 2
+                    
+                currentRow = matrix[i][j]
+                sequenceRow = 1
+                
+            if matrix[j][i] == currentColumn:
+                sequenceColumn += 1
+            else:
+                if sequenceColumn > 4:
+                    penalty += sequenceColumn - 2
+                    
+                currentColumn = matrix[j][i]
+                sequenceColumn = 1
+            
+        if sequenceRow > 4:
+            penalty += sequenceRow - 2
+        if sequenceColumn > 4:
+            penalty += sequenceColumn - 2
+                
+    return penalty
+    
+def evaluate_second_penalty(matrix, size: int):
+    penalty = 0
+    
+    for i in range(size - 1):
+        for j in range(size - 1):
+            if matrix[i][j] == matrix[i + 1][j] == matrix[i][j + 1] == matrix[i + 1][j + 1]:
+                penalty += 3
+    
+    return penalty
+    
+def evaluate_third_penalty(matrix, size: int):
+    penalty = 0
+    
+    bad_patterns = ['10111010000', '00001011101']
+    
+    for i in range(size):
+        for j in range(size - 10):
+            horizontal_segment = ''.join(map(str, matrix[i][j:j + 11]))
+            if horizontal_segment in bad_patterns:
+                penalty += 40
+            
+            vertical_segment = ''.join(str(matrix[j + k][i]) for k in range(11))
+            if vertical_segment in bad_patterns:
+                penalty += 40
+    
+    return penalty
+    
+def evaluate_fourth_penalty(matrix, size: int):
+    total_modules = size * size
+    dark_modules_count = sum(row.count(1) for row in matrix)
+            
+    dark_modules_percentage = int(dark_modules_count / total_modules * 100)
+    
+    previous_multiple_of_five = (dark_modules_percentage // 5) * 5
+    next_multiple_of_five = previous_multiple_of_five + 5
+    
+    return min(abs(previous_multiple_of_five - 50) / 5, abs(next_multiple_of_five - 50) / 5) * 10
+    
+def determine_best_mask(masked_matrices, size: int):
+    lowest_penalty = float('inf')
+    lowest_penalty_index = 0
+    
+    # Checks the 4 penalty rules for every mask
+    for i in range(len(masked_matrices)):
+        penalty = 0
+        
+        # The first rule gives the QR code a penalty for each group of five or more same-colored modules in a row (or column).
+        penalty += evaluate_first_penalty(masked_matrices[i], size)
+        
+        # The second rule gives the QR code a penalty for each 2x2 area of same-colored modules in the matrix.
+        penalty += evaluate_second_penalty(masked_matrices[i], size)
+        
+        # The third rule gives the QR code a large penalty if there are patterns that look similar to the finder patterns.
+        penalty += evaluate_third_penalty(masked_matrices[i], size)
+        
+        # The fourth rule gives the QR code a penalty if more than half of the modules are dark or light, with a larger penalty for a larger difference.
+        penalty += evaluate_fourth_penalty(masked_matrices[i], size)
+        
+        if penalty < lowest_penalty:
+            lowest_penalty = penalty
+            lowest_penalty_index = i
+    
+    # Chooses the one with the lowest penalty score
+    return lowest_penalty_index
+
+def mask_data(matrix, version: int):
+    size = version * 4 + 17
+    
+    masked_matrices = apply_masks(matrix, size)
+    lowest_penalty_index = determine_best_mask(masked_matrices, size)
+    best_matrix = masked_matrices[lowest_penalty_index]
+    
+    return best_matrix
+        
 if __name__ == "__main__":
         
     data = 'HELLO WORLD'
     encode_type = get_data_type(data)
-    version = get_version(data, encode_type)
+    version, error_correction_level = get_version_and_error_correction_level(data, encode_type)
     encoded_data = encode_data(data, version, encode_type)
     message = structure_final_message(encoded_data, version)
     matrix = place_matrix_modules(message, version)
-    for a in matrix:
+    masked_matrix = mask_data(matrix, version)
+    for a in masked_matrix:
         for b in a:
             print(f" {b} ", end="")
         print("")
