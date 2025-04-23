@@ -1,26 +1,15 @@
-# QR Code Encoder
+# QR Code Generator
 
-A simple QR Code encoder written in Python, designed to convert input text into a binary string suitable for QR code generation. This project supports **Numeric**, **Alphanumeric**, and **Byte** encoding modes in accordance with the QR code specification.
+## Overview
+This project is a QR Code generator implemented in Python. It encodes various types of data into QR Codes, including numeric, alphanumeric, byte, and Kanji characters. The generator also incorporates error correction capabilities and applies different mask patterns to optimize the QR Code for scanning.
 
----
+## Features
+- **Data Type Detection**: Automatically detects the type of data (numeric, alphanumeric, byte, or Kanji).
+- **Encoding**: Supports encoding of numeric, alphanumeric, byte, and Kanji data into QR Code format.
+- **Error Correction**: Implements Reed-Solomon error correction to recover data in case of damage.
+- **Masking**: Applies various mask patterns to minimize scanning errors and optimize readability.
+- **Dynamic Versioning**: Adjusts the QR Code version based on the amount of data and error correction level.
+- **Image Generation**: Generates a visual representation of the QR Code.
 
-## 🚀 Features
-
-- Automatic detection of encoding mode (Numeric, Alphanumeric, Byte)
-- Support for QR code versions 1 to 40 (Medium error correction)
-- Data segmentation and encoding as per QR standard
-- Padding and final bitstream construction
-
----
-
-## 🧠 Encoding Modes
-
-The encoder supports the following QR modes:
-
-| Mode         | Detected When                              |
-|--------------|---------------------------------------------|
-| Numeric      | String contains only digits (`0-9`)         |
-| Alphanumeric | Characters from `0-9A-Z $%*+-./:`           |
-| Byte         | Any other character (UTF-8 is assumed)      |
-
-It is currently a work in progress
+## How to use
+Thanks to the PyScript framework and the GitHub Pages, this application is available for free at https://fredericosramos.github.io/QRCode-Generator/
