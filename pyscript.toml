@@ -1,0 +1,3 @@
+name = "QR Code Generator"
+description = "Application to generate qr codes"
+packages = ["pillow"]
