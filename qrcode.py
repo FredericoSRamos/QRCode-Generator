@@ -1,4 +1,6 @@
 from PIL import Image
+from pyweb import pydom
+from pyscript import display
 
 NUMERIC = 0
 ALPHANUMERIC = 1
@@ -447,7 +449,7 @@ def get_version_and_ec_level(data, encode_type, ec_level=''):
 
     # If an invalid error correction level is provided, return an error message
     if ec_level and ec_level not in VALID_EC_LEVELS:
-        return "Invalid error correction level provided"
+        return "Invalid error correction level provided", ''
 
     # Calculate the length of the data
     if encode_type == BYTE:
@@ -460,7 +462,7 @@ def get_version_and_ec_level(data, encode_type, ec_level=''):
         for version, capacities in enumerate(CHARACTER_CAPACITY_TABLE):
             if capacities[ec_level][encode_type] >= data_length:
                 return version + 1, ec_level
-        return "Cannot fit data with the specified error correction level"
+        return "Cannot fit data with the specified error correction level", ''
 
     # If no error correction level is provided, try all valid levels, from highest to lowest
     for ec_level in VALID_EC_LEVELS:
@@ -468,7 +470,7 @@ def get_version_and_ec_level(data, encode_type, ec_level=''):
             if capacities[ec_level][encode_type] >= data_length:
                 return version + 1, ec_level
 
-    return "Cannot fit data into a QR Code"  # If no valid combination is found
+    return "Cannot fit data into a QR Code", ''  # If no valid combination is found
 
 # Function to encode numeric data (groups of 3 digits)
 def encode_numeric(data):
@@ -1078,20 +1080,26 @@ def draw_qr_code(matrix, module_size=10):
 
     return img
 
-if __name__ == "__main__":
+def generate_qr_code(event):
 
-    data = 'Hello, world!'
+    data = pydom["input#data"][0].value
+
     encode_type = get_data_type(data)
-    version, ec_level = get_version_and_ec_level(data, encode_type)
+    version, ec_level = get_version_and_ec_level(data, encode_type, ec_level=pydom["input#error-correction-hidden"][0].value)
+    try:
+        int(version)
 
-    encoded_data = encode_data(data, version, encode_type, ec_level)
+        encoded_data = encode_data(data, version, encode_type, ec_level)
 
-    message = structure_final_message(encoded_data, version, ec_level)
+        message = structure_final_message(encoded_data, version, ec_level)
 
-    matrix = place_matrix_modules(message, version)
-    masked_matrix, mask = mask_data(matrix, version, ec_level)
+        matrix = place_matrix_modules(message, version)
+        masked_matrix, mask = mask_data(matrix, version, ec_level)
 
-    final_matrix = add_quiet_zone(masked_matrix)
+        final_matrix = add_quiet_zone(masked_matrix)
 
-    qr_code = draw_qr_code(final_matrix)
-    qr_code.save('qr_code.png')
+        qr_code = draw_qr_code(final_matrix)
+        pydom["div#qrcode"][0].html = ''
+        display(qr_code, target="qrcode")
+    except:
+        pydom["div#qrcode"][0].html = version
