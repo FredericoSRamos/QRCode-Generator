@@ -443,7 +443,7 @@ def get_version_and_ec_level(data, encode_type, ec_level=''):
     # List of valid error correction levels:
     # L - Low: 7% of data can be restored
     # M - Medium: 15% of data can be restored
-    # Q - Quarter: 25% of data can be restored
+    # Q - Quartile: 25% of data can be restored
     # H - High: 30% of data can be restored
     VALID_EC_LEVELS = "HQML"
 
@@ -935,20 +935,18 @@ def add_quiet_zone(matrix):
 
     return final_matrix
 
-def evaluate_third_penalty(matrix):
+def evaluate_third_penalty(matrix, size):
     penalty = 0
 
     bad_patterns = ['10111010000', '00001011101']
-    full_matrix = add_quiet_zone(matrix)
-    size = len(full_matrix)
 
     for i in range(size):
         for j in range(size - 10):
-            horizontal_segment = ''.join(map(str, full_matrix[i][j:j + 11]))
+            horizontal_segment = ''.join(map(str, matrix[i][j:j + 11]))
             if horizontal_segment in bad_patterns:
                 penalty += 40
 
-            vertical_segment = ''.join(str(full_matrix[j + k][i]) for k in range(11))
+            vertical_segment = ''.join(str(matrix[j + k][i]) for k in range(11))
             if vertical_segment in bad_patterns:
                 penalty += 40
 
@@ -972,25 +970,29 @@ def determine_best_mask(masked_matrices, size):
     # Checks the 4 penalty rules for every mask
     for i in range(len(masked_matrices)):
         penalty = 0
+        matrix = masked_matrices[i]
 
         # The first rule gives the QR code a penalty for each group of five or more same-colored modules in a row (or column).
-        penalty += evaluate_first_penalty(masked_matrices[i], size)
+        penalty += evaluate_first_penalty(matrix, size)
 
         # The second rule gives the QR code a penalty for each 2x2 area of same-colored modules in the matrix.
-        penalty += evaluate_second_penalty(masked_matrices[i], size)
-
-        # The third rule gives the QR code a large penalty if there are patterns that look similar to the finder patterns.
-        penalty += evaluate_third_penalty(masked_matrices[i])
+        penalty += evaluate_second_penalty(matrix, size)
 
         # The fourth rule gives the QR code a penalty if more than half of the modules are dark or light, with a larger penalty for a larger difference.
-        penalty += evaluate_fourth_penalty(masked_matrices[i], size)
+        penalty += evaluate_fourth_penalty(matrix, size)
+
+        # Apply the quiet zone (white border around the qr code) before evaluating third penalty
+        masked_matrices[i] = add_quiet_zone(masked_matrices[i])
+
+        # The third rule gives the QR code a large penalty if there are patterns that look similar to the finder patterns.
+        penalty += evaluate_third_penalty(masked_matrices[i], size + 8)
 
         if penalty < lowest_penalty:
             lowest_penalty = penalty
             lowest_penalty_index = i
 
     # Chooses the one with the lowest penalty score
-    return lowest_penalty_index
+    return masked_matrices[lowest_penalty_index]
 
 def get_version_string(version):
     version_information_strings = [
@@ -1060,10 +1062,9 @@ def mask_data(matrix, version, ec_level):
 
         fill_reserved_areas(masked_matrices[i], version, format_string)
 
-    lowest_penalty_index = determine_best_mask(masked_matrices, size)
-    best_matrix = masked_matrices[lowest_penalty_index]
+    best_masked_matrix = determine_best_mask(masked_matrices, size)
 
-    return best_matrix, lowest_penalty_index
+    return best_masked_matrix
 
 def draw_qr_code(matrix, module_size=10):
     size = len(matrix)
@@ -1086,20 +1087,19 @@ def generate_qr_code(event):
 
     encode_type = get_data_type(data)
     version, ec_level = get_version_and_ec_level(data, encode_type, ec_level=pydom["input#error-correction-hidden"][0].value)
+
     try:
         int(version)
+        pydom["div#qrcode"][0].html = ''
 
         encoded_data = encode_data(data, version, encode_type, ec_level)
 
         message = structure_final_message(encoded_data, version, ec_level)
 
         matrix = place_matrix_modules(message, version)
-        masked_matrix, mask = mask_data(matrix, version, ec_level)
-
-        final_matrix = add_quiet_zone(masked_matrix)
+        final_matrix = mask_data(matrix, version, ec_level)
 
         qr_code = draw_qr_code(final_matrix)
-        pydom["div#qrcode"][0].html = ''
         display(qr_code, target="qrcode")
     except:
         pydom["div#qrcode"][0].html = version

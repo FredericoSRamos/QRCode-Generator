@@ -1,16 +1,40 @@
 <!DOCTYPE html>
-
 <html>
     <head>
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <script type="module" src="https://pyscript.net/releases/2024.1.1/core.js"></script>
-        <title>PyScript Hello World</title>
-        <link rel="icon" type="image/png" href="./assets/favicon.png" />
+
+        <!-- PyScript Core -->
+        <script type="module" src="https://pyscript.net/releases/2024.2.1/core.js"></script>
+
+        <title>QR Code Generator</title>
+        <link rel="icon" type="image/png" href="./favicon.png" />
+
+        <!-- Bootstrap CSS -->
         <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@4.3.1/dist/css/bootstrap.min.css" integrity="sha384-ggOyR0iXCbMQv3Xipma34MD+dH/1fQ784/j6cY/iJTQUOhcWr7x9JvoRxT2MZw1T" crossorigin="anonymous">
+
+        <style>
+            #loading {
+                outline: none;
+                border: none;
+                background: transparent;
+            }
+        </style>
+
+        <!-- Handle loading screen -->
+        <script type="module">
+            const loading = document.getElementById('loading');
+            addEventListener('py:ready', () => loading.close());
+            loading.showModal();
+        </script>
     </head>
     
-    <body class="bg-light">
+    <body>
+        <!-- Loading screen -->
+        <dialog id="loading">
+            <h1>Loading ...</h1>
+        </dialog>
+
         <div class="container py-5">
             <!-- Input & Button Section -->
             <div class="row justify-content-center">
@@ -19,7 +43,7 @@
                     <div class="input-group mb-3">
                         <input id="data" type="text" class="form-control" placeholder="Enter data for QR code" aria-label="Data input" aria-describedby="btn-load">
                         <div class="input-group-append">
-                            <button class="btn btn-primary" id="btn-load" type="submit" py-click="generate_qr_code">Generate</button>
+                            <button class="btn btn-primary" id="btn-load" type="submit" onclick="showDiv()" py-click="generate_qr_code">Generate</button>
                         </div>
                     </div>
                 </div>
@@ -27,8 +51,8 @@
     
             <!-- QR Code Section -->
             <section class="row justify-content-center">
-                <div class="col-md-6">
-                    <div id="qrcode" class="border p-4 bg-white rounded shadow-sm mx-auto d-flex justify-content-center align-items-center" style="max-width: 100%; height: auto;"></div>
+                <div class="col-md-6" hidden id="qr-box">
+                    <div id="qrcode" class="border p-4 rounded shadow-sm mx-auto d-flex justify-content-center align-items-center"></div>
                 </div>
             </section>
         </div>
@@ -60,22 +84,18 @@
                     </div>
                 </div>
             </div>
-        </div>        
+        </div>
 
         <!-- Hidden Input Field to Store the Selected Error Correction Level -->
         <input type="hidden" id="error-correction-hidden" value="" />
 
-        <!-- PyScript -->
+        <!-- PyScript App -->
         <script type="py" src="./qr_code_generator.py" config="./pyscript.toml"></script>
     
-        <!-- Custom JS to Ensure the QR Code is Sized Appropriately -->
+        <!-- QR Code Resizing Script -->
         <script>
             window.onload = function() {
-                // Ensure the QR code image inside the div resizes properly
                 const qrcodeDiv = document.getElementById('qrcode');
-                const maxWidth = qrcodeDiv.offsetWidth;
-    
-                // Resize the QR code image dynamically after it is generated
                 const resizeQRCode = () => {
                     const qrCodeImage = qrcodeDiv.querySelector('img');
                     if (qrCodeImage) {
@@ -83,20 +103,24 @@
                         qrCodeImage.style.height = 'auto';
                     }
                 };
-    
-                // When the QR code is generated, apply resizing
                 new MutationObserver(resizeQRCode).observe(qrcodeDiv, { childList: true, subtree: true });
+
+                qrcodeDiv.addEventListener('onchange', () => {
+                    if (qrcodeDiv.innerHTML === '') {
+                        qrcodeDiv.innerHTML = 'Loading'
+                    }
+                })
             };
-            
-            // Update the hidden field when the radio button value changes
+
             function updateHiddenField() {
                 const selectedRadio = document.querySelector('input[name="error-correction"]:checked');
                 document.getElementById("error-correction-hidden").value = selectedRadio.value;
             }
 
-            document.getElementById("btn-load").addEventListener("click", function() {
-                pyscript.run('generate_qr_code()');
-            });
+            function showDiv() {
+                const qrBoxDiv = document.getElementById('qr-box');
+                qrBoxDiv.hidden = false;
+            }
         </script>
-    </body>    
+    </body>
 </html>
