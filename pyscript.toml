@@ -1,3 +1,9 @@
 name = "QR Code Generator"
 description = "Application to generate qr codes"
 packages = ["pillow"]
+
+[files]
+"constants.py" = "./constants.py"
+"encoder.py" = "./encoder.py"
+"error_correction.py" = "./error_correction.py"
+"matrix.py" = "./matrix.py"
