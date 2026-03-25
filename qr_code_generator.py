@@ -32,30 +32,28 @@ def generate_qr_code(event):
     data = pydom["input#data"][0].value
 
     encode_type = get_data_type(data)
-    version, ec_level = get_version_and_ec_level(
-        data, 
-        encode_type, 
-        ec_level=pydom["input#error-correction-hidden"][0].value
-    )
 
     try:
-        # If version is an error string, this will raise a ValueError
-        int(version)
+        version, ec_level = get_version_and_ec_level(
+            data, 
+            encode_type, 
+            ec_level=pydom["input#error-correction-hidden"][0].value
+        )
         pydom["div#qrcode"][0].html = ''
 
-        encoded_data = encode_data(data, int(version), encode_type, ec_level)
+        encoded_data = encode_data(data, version, encode_type, ec_level)
 
-        message = structure_final_message(encoded_data, int(version), ec_level)
+        message = structure_final_message(encoded_data, version, ec_level)
 
-        qr_matrix = QRCodeMatrix(int(version), ec_level)
+        qr_matrix = QRCodeMatrix(version, ec_level)
         qr_matrix.place_matrix_modules(message)
         final_matrix = qr_matrix.mask_data()
 
         qr_code = draw_qr_code(final_matrix)
         display(qr_code, target="qrcode")
-    except ValueError:
+    except ValueError as e:
         # Expected fallback if data couldn't fit or input was invalid
-        pydom["div#qrcode"][0].html = str(version)
+        pydom["div#qrcode"][0].html = str(e)
     except Exception as e:
         # Prevent bare except and expose unexpected bugs
         pydom["div#qrcode"][0].html = f"An unexpected error occurred: {str(e)}"

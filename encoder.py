@@ -31,16 +31,15 @@ def get_data_type(data: str) -> int:
     except UnicodeEncodeError:
         return BYTE
 
-def get_version_and_ec_level(data: str, encode_type: int, ec_level: str = '') -> Tuple[Union[int, str], str]:
+def get_version_and_ec_level(data: str, encode_type: int, ec_level: str = '') -> Tuple[int, str]:
     """
     Determine the appropriate QR version and error correction level for the data.
-    Returns a tuple containing the selected QR version (1-40) and EC level, 
-    or an error message and empty string if no valid combination is found.
+    Raises ValueError if no valid combination is found or provided EC level is invalid.
     """
     VALID_EC_LEVELS = "HQML"
 
     if ec_level and ec_level not in VALID_EC_LEVELS:
-        return "Invalid error correction level provided", ''
+        raise ValueError("Invalid error correction level provided")
 
     if encode_type == BYTE:
         data_length = len(encode_byte(data)) // 8
@@ -51,14 +50,14 @@ def get_version_and_ec_level(data: str, encode_type: int, ec_level: str = '') ->
         for version, capacities in enumerate(CHARACTER_CAPACITY_TABLE):
             if capacities[ec_level][encode_type] >= data_length:
                 return version + 1, ec_level
-        return "Cannot fit data with the specified error correction level", ''
+        raise ValueError("Cannot fit data with the specified error correction level")
 
     for ec_level_iter in VALID_EC_LEVELS:
         for version, capacities in enumerate(CHARACTER_CAPACITY_TABLE):
             if capacities[ec_level_iter][encode_type] >= data_length:
                 return version + 1, ec_level_iter
 
-    return "Cannot fit data into a QR Code", ''
+    raise ValueError("Cannot fit data into a QR Code")
 
 def encode_numeric(data: str) -> str:
     """
