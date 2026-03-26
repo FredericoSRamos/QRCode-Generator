@@ -76,11 +76,11 @@ def encode_numeric(data: str) -> str:
     for group in number_groups:
         num = int(group)
         if len(group) == 3:
-            encoded_data.append(format(num, '010b'))
+            encoded_data.append(f"{num:010b}")
         elif len(group) == 2:
-            encoded_data.append(format(num, '07b'))
+            encoded_data.append(f"{num:07b}")
         elif len(group) == 1:
-            encoded_data.append(format(num, '04b'))
+            encoded_data.append(f"{num:04b}")
 
     return ''.join(encoded_data)
 
@@ -102,10 +102,10 @@ def encode_alphanumeric(data: str) -> str:
     for pair in string_pairs:
         if len(pair) == 2:
             value = alphanumeric_chars.index(pair[0]) * 45 + alphanumeric_chars.index(pair[1])
-            encoded_data.append(format(value, '011b'))
+            encoded_data.append(f"{value:011b}")
         else:
             value = alphanumeric_chars.index(pair[0])
-            encoded_data.append(format(value, '06b'))
+            encoded_data.append(f"{value:06b}")
 
     return ''.join(encoded_data)
 
@@ -119,7 +119,7 @@ def encode_byte(data: str) -> str:
     except UnicodeEncodeError:
         encoded_data = data.encode('UTF-8')
 
-    return ''.join(format(byte, '08b') for byte in encoded_data)
+    return "".join(f"{byte:08b}" for byte in encoded_data)
 
 def encode_kanji(data: str) -> str:
     """
@@ -143,7 +143,7 @@ def encode_kanji(data: str) -> str:
         least_significant_byte = adjusted & 0xFF
         final_value = most_significant_byte * 0xC0 + least_significant_byte
 
-        encoded_data.append(format(final_value, '013b'))
+        encoded_data.append(f"{final_value:013b}")
         i += 2
 
     return ''.join(encoded_data)
@@ -153,7 +153,7 @@ def encode_data(data: str, version: int, encode_type: int, ec_level: str) -> str
     Wrapper function that formats the length of the data and handles mode indicators,
     padding, and joining the final binary string based on encoding specifications.
     """
-    mode_indicator = format(1 << encode_type, '04b')
+    mode_indicator = f"{1 << encode_type:04b}"
 
     if version < 10:
         character_count_size = ['010b', '09b', '08b', '08b']
@@ -166,32 +166,38 @@ def encode_data(data: str, version: int, encode_type: int, ec_level: str) -> str
 
     if encode_type == NUMERIC:
         encoded_data = encode_numeric(data)
-        character_count = format(len(data), character_count_bits)
+        character_count = f"{len(data):{character_count_bits}}"
     elif encode_type == ALPHANUMERIC:
         encoded_data = encode_alphanumeric(data)
-        character_count = format(len(data), character_count_bits)
+        character_count = f"{len(data):{character_count_bits}}"
     elif encode_type == BYTE:
         encoded_data = encode_byte(data)
-        character_count = format(len(encoded_data) // 8, character_count_bits)
+        character_count = f"{len(encoded_data) // 8:{character_count_bits}}"
     else:
         encoded_data = encode_kanji(data)
-        character_count = format(len(data), character_count_bits)
+        character_count = f"{len(data):{character_count_bits}}"
 
-    concatenated_string = mode_indicator + character_count + encoded_data
+    binary_parts = [mode_indicator, character_count, encoded_data]
+    current_len = sum(len(p) for p in binary_parts)
 
     required_bits = DATA_CODEWORDS[version - 1][ec_level] * 8
-    bits_left = required_bits - len(concatenated_string)
+    bits_left = required_bits - current_len
 
     if bits_left >= 4:
-        concatenated_string += '0000'
-    else:
-        concatenated_string += '0' * bits_left
+        binary_parts.append('0000')
+        current_len += 4
+    elif bits_left > 0:
+        binary_parts.append('0' * bits_left)
+        current_len += bits_left
 
-    concatenated_string += '0' * ((8 - len(concatenated_string) % 8) % 8)
+    padding_needed = (8 - current_len % 8) % 8
+    if padding_needed > 0:
+        binary_parts.append('0' * padding_needed)
+        current_len += padding_needed
 
-    bytes_left = (required_bits - len(concatenated_string)) // 8
+    bytes_left = (required_bits - current_len) // 8
     pad_bytes = ['11101100', '00010001']
     for i in range(bytes_left):
-        concatenated_string += pad_bytes[i % 2]
+        binary_parts.append(pad_bytes[i % 2])
 
-    return concatenated_string
+    return "".join(binary_parts)
