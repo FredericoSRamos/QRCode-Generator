@@ -1,5 +1,7 @@
 from typing import List, Union
-from constants import ALIGNMENT_PATTERN_LOCATIONS, FORMAT_INFORMATION
+from constants import (
+    ALIGNMENT_PATTERN_LOCATIONS, FORMAT_INFORMATION, VERSION_INFORMATION_STRINGS
+)
 
 class QRCodeMatrix:
     """
@@ -9,7 +11,8 @@ class QRCodeMatrix:
         self.version = version
         self.ec_level = ec_level
         self.size = version * 4 + 17
-        self.matrix: List[List[Union[int, str]]] = [[-1 for _ in range(self.size)] for _ in range(self.size)]
+        self.matrix: List[List[int]] = [[-1 for _ in range(self.size)] for _ in range(self.size)]
+        self.is_reserved: List[List[bool]] = []
 
     def place_finder_patterns(self) -> None:
         size = self.size
@@ -109,6 +112,8 @@ class QRCodeMatrix:
         self.place_timing_patterns()
         self.define_reserved_areas()
 
+        self.is_reserved = [[self.matrix[r][c] != -1 for c in range(self.size)] for r in range(self.size)]
+
         size = self.size
         tracker = 0
         row = size - 1
@@ -117,12 +122,12 @@ class QRCodeMatrix:
 
         while tracker < len(data):
             if self.matrix[row][column] == -1:
-                self.matrix[row][column] = data[tracker]
+                self.matrix[row][column] = int(data[tracker])
                 tracker += 1
             column -= 1
 
             if self.matrix[row][column] == -1:
-                self.matrix[row][column] = data[tracker]
+                self.matrix[row][column] = int(data[tracker])
                 tracker += 1
             row += direction
             column += 1
@@ -138,49 +143,36 @@ class QRCodeMatrix:
     def apply_masks(self) -> List[List[List[int]]]:
         size = self.size
         masked_matrices = [[[0 for _ in range(size)] for _ in range(size)] for _ in range(8)]
+        
+        MASKS = [
+            lambda r, c: (r + c) % 2 == 0,
+            lambda r, c: r % 2 == 0,
+            lambda r, c: c % 3 == 0,
+            lambda r, c: (r + c) % 3 == 0,
+            lambda r, c: (r // 2 + c // 3) % 2 == 0,
+            lambda r, c: (r * c) % 2 + (r * c) % 3 == 0,
+            lambda r, c: ((r * c) % 2 + (r * c) % 3) % 2 == 0,
+            lambda r, c: ((r + c) % 2 + (r * c) % 3) % 2 == 0,
+        ]
 
         for row in range(size):
             for column in range(size):
-                if self.matrix[row][column] == '0':
-                    masked_matrices[0][row][column] = 1 - (row + column) % 2
-                    masked_matrices[1][row][column] = 1 - row % 2
-                    masked_matrices[2][row][column] = 1 if column % 3 == 0 else 0
-                    masked_matrices[3][row][column] = 1 if (row + column) % 3 == 0 else 0
-                    masked_matrices[4][row][column] = 1 - (row // 2 + column // 3) % 2
-                    masked_matrices[5][row][column] = 1 if row * column % 2 + row * column % 3 == 0 else 0
-                    masked_matrices[6][row][column] = 1 - (row * column % 2 + row * column % 3) % 2
-                    masked_matrices[7][row][column] = 1 - ((row + column) % 2 + row * column % 3) % 2
-                elif self.matrix[row][column] == '1':
-                    masked_matrices[0][row][column] = (row + column) % 2
-                    masked_matrices[1][row][column] = row % 2
-                    masked_matrices[2][row][column] = 0 if column % 3 == 0 else 1
-                    masked_matrices[3][row][column] = 0 if (row + column) % 3 == 0 else 1
-                    masked_matrices[4][row][column] = (row // 2 + column // 3) % 2
-                    masked_matrices[5][row][column] = 0 if row * column % 2 + row * column % 3 == 0 else 1
-                    masked_matrices[6][row][column] = (row * column % 2 + row * column % 3) % 2
-                    masked_matrices[7][row][column] = ((row + column) % 2 + row * column % 3) % 2
+                val = self.matrix[row][column]
+                
+                # If the bit is reserved, push it directly
+                if self.is_reserved[row][column]:
+                    for m_idx in range(8):
+                        masked_matrices[m_idx][row][column] = val
                 else:
-                    # In case of reserved modules or padding that needs to just pass through
-                    value = self.matrix[row][column]
-                    if type(value) is int:
-                        for m in range(8):
-                            masked_matrices[m][row][column] = value
+                    # It's a data payload bit. Toggle it if mask applies.
+                    for m_idx in range(8):
+                        mask_bit = 1 if MASKS[m_idx](row, column) else 0
+                        masked_matrices[m_idx][row][column] = val ^ mask_bit
 
         return masked_matrices
 
     def get_version_string(self) -> str:
-        version_information_strings = [
-            '000111110010010100', '001000010110111100', '001001101010011001', '001010010011010011',
-            '001011101111110110', '001100011101100010', '001101100001000111', '001110011000001101',
-            '001111100100101000', '010000101101111000', '010001010001011101', '010010101000010111',
-            '010011010100110010', '010100100110100110', '010101011010000011', '010110100011001001',
-            '010111011111101100', '011000111011000100', '011001000111100001', '011010111110101011',
-            '011011000010001110', '011100110000011010', '011101001100111111', '011110110101110101',
-            '011111001001010000', '100000100111010101', '100001011011110000', '100010100010111010',
-            '100011011110011111', '100100101100001011', '100101010000101110', '100110101001100100',
-            '100111010101000001','101000110001101001'
-        ]
-        return version_information_strings[self.version - 7]
+        return VERSION_INFORMATION_STRINGS[self.version - 7]
 
     def place_format_string(self, matrix: List[List[int]], format_string: str) -> None:
         size = self.size

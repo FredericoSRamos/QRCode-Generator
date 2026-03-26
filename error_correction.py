@@ -1,7 +1,8 @@
 from typing import List
 from constants import (
     EC_TABLE, GALOIS_ANTILOG, GALOIS_LOG,
-    GENERATOR_POLYNOMIALS, EC_CODEWORDS
+    GENERATOR_POLYNOMIALS, EC_CODEWORDS,
+    REMAINDER_BITS
 )
 
 def split_data(data_codewords: List[int], version: int, ec_level: str) -> List[List[List[int]]]:
@@ -83,9 +84,6 @@ def structure_final_message(encoded_data: str, version: int, ec_level: str) -> s
         for ecc in ecc_blocks:
             final_message.append(format(ecc[i], '08b'))
 
-    remainder_bits = [0, 7, 7, 7, 7, 7, 0, 0, 0, 0, 0, 0, 0, 3, 3, 3, 3, 3, 3, 3,
-                      4, 4, 4, 4, 4, 4, 4, 3, 3, 3, 3, 3, 3, 3, 0, 0, 0, 0, 0, 0]
-    
-    final_message.extend(['0'] * remainder_bits[version - 1])
+    final_message.extend(['0'] * REMAINDER_BITS[version - 1])
 
     return ''.join(final_message)

@@ -13,20 +13,6 @@
         <!-- Bootstrap CSS -->
         <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@4.3.1/dist/css/bootstrap.min.css" integrity="sha384-ggOyR0iXCbMQv3Xipma34MD+dH/1fQ784/j6cY/iJTQUOhcWr7x9JvoRxT2MZw1T" crossorigin="anonymous">
 
-        <style>
-            #loading {
-                outline: none;
-                border: none;
-                background: transparent;
-            }
-        </style>
-
-        <!-- Handle loading screen -->
-        <script type="module">
-            const loading = document.getElementById('loading');
-            addEventListener('py:ready', () => loading.close());
-            loading.showModal();
-        </script>
     </head>
     
     <body>
@@ -43,7 +29,7 @@
                     <div class="input-group mb-3">
                         <input id="data" type="text" class="form-control" placeholder="Enter data for QR code" aria-label="Data input" aria-describedby="btn-load">
                         <div class="input-group-append">
-                            <button class="btn btn-primary" id="btn-load" type="submit" onclick="showDiv()" py-click="generate_qr_code">Generate</button>
+                            <button class="btn btn-primary" id="btn-load" type="submit" onclick="showDiv()" py-click="generate_qr_code"></button>
                         </div>
                     </div>
                 </div>
@@ -91,6 +77,13 @@
 
         <!-- PyScript App -->
         <script type="py" src="./qr_code_generator.py" config="./pyscript.toml"></script>
+
+        <!-- Loading -->
+        <script type="module">
+            const loading = document.getElementById('btn-load');
+            addEventListener('py:ready', () => loading.innerHTML = "Generate");
+            loading.innerHTML = "Loading...";
+        </script>
     
         <!-- QR Code Resizing Script -->
         <script>

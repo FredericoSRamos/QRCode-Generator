@@ -1,7 +1,7 @@
 from typing import Tuple, Union
 from constants import (
     NUMERIC, ALPHANUMERIC, BYTE, KANJI, ALPHANUMERIC_CHARS,
-    CHARACTER_CAPACITY_TABLE, DATA_CODEWORDS
+    CHARACTER_CAPACITY_TABLE, DATA_CODEWORDS, PAD_BYTES
 )
 
 def get_data_type(data: str) -> int:
@@ -196,8 +196,7 @@ def encode_data(data: str, version: int, encode_type: int, ec_level: str) -> str
         current_len += padding_needed
 
     bytes_left = (required_bits - current_len) // 8
-    pad_bytes = ['11101100', '00010001']
     for i in range(bytes_left):
-        binary_parts.append(pad_bytes[i % 2])
+        binary_parts.append(PAD_BYTES[i % 2])
 
     return "".join(binary_parts)
