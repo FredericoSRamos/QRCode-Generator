@@ -12,17 +12,14 @@ def draw_qr_code(matrix: List[List[int]], module_size: int = 10):
     Renders the final QR Code matrix using PIL into an image.
     """
     size = len(matrix)
-    img_size = size * module_size
-    img = Image.new('L', (img_size, img_size), color=255)
+    img = Image.new('1', (size, size))
+    pixels = img.load()
 
     for i in range(size):
         for j in range(size):
-            color = 0 if matrix[i][j] == 1 else 255
-            for x in range(module_size):
-                for y in range(module_size):
-                    img.putpixel((j * module_size + x, i * module_size + y), color)
+            pixels[j, i] = 0 if matrix[i][j] == 1 else 1
 
-    return img
+    return img.resize((size * module_size, size * module_size), Image.Resampling.NEAREST)
 
 def generate_qr_code(event):
     """
